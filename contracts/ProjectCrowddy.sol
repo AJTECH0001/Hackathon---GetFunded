@@ -70,4 +70,8 @@ contract ProjectCrowddy {
    function  getProjects() external view returns (Project[] memory) {
         return s_projects;
    }
+
+   function removeProject(uint256 id) external only returns () {
+    
+   }
 }
