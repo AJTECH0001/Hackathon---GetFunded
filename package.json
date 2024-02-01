@@ -1,0 +1,15 @@
+{
+  "name": "projectcrowddy",
+  "version": "1.0.0",
+  "description": "A decentralized crowdfund platform for business and infrastructural project'",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Paul",
+  "license": "ISC",
+  "dependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.19.5"
+  }
+}
