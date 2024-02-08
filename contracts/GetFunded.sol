@@ -61,8 +61,8 @@ contract GetFunded is Owned {
      mapping (uint256 => address) private idToUserAddress;
      mapping (address => bool) private isVerifier;
      mapping (uint256 => uint256) private s_idToActive;
-     mapping(uint => mapping(address => uint))private s_investorsBalance;
-    `mapping(address => bool) private s_hasInvested;
+     mapping (uint => mapping(address => uint))private s_investorsBalance;
+    `mapping (address => bool) private s_hasInvested;
 
      error InvalidUser();
      error NotVerifier();
@@ -114,18 +114,8 @@ contract GetFunded is Owned {
           if (
                isVerifier[idToUser[id]] = false;
           ) revert NotVerifier();
+          _;
      }
-
-     modifier activeTime(uint _Id) {
-          Project storage project = s_project[id];
-        if(
-          _getCurrentTimestamp() <= (s_idToActive[_Id].duration)
-          ) revert NotActive();
-        if(
-          project.active
-        ) revert NotActive();
-        _;
-    }
 
      function  getProjects() external view returns (Project[] memory) {
           return s_projects;
@@ -152,6 +142,10 @@ contract GetFunded is Owned {
           return project.investors;
      }
 
+     function getUsers() external view returns (Users[] memory) {
+          return s_users;
+     }
+
      function setVerifier(string memory _role, uint256 id) public onlyOwner {
           User storage user = s_user[idToUser[id]];
           user.role = keccak256(abi.encodePacked(_role));
@@ -174,6 +168,8 @@ contract GetFunded is Owned {
 
           user.uId = s_userId + 1;
           idToUser[user.uId] = msg.sender;
+
+          s_users.push(user);
 
           emit Registered (
                msg.sender,
