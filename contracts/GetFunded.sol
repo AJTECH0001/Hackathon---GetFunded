@@ -60,7 +60,6 @@ contract GetFunded is Owned {
      mapping (uint256 => Project) private s_project;
      mapping (uint256 => address) private idToUserAddress;
      mapping (address => bool) private isVerifier;
-     mapping (uint256 => uint256) private s_idToActive;
      mapping (uint => mapping(address => uint))private s_investorsBalance;
     `mapping (address => bool) private s_hasInvested;
 
@@ -176,17 +175,19 @@ contract GetFunded is Owned {
           );
      }
 
-     function createProject(Project calldata _project) external onlyUser {
+     function createProject(Project calldata _project) external onlyUser returns(uint256){
           Project storage project = s_project[s_projectId];
 
           if(
-               project.active[project.id] = true;
+               project.active[project.id]
           ) revert ProjectExists();
+
           if(
                msg.sender == address(0)
           ) revert ZeroAddressUnAuthorized();
+
           if(
-               isVerifier[msg.sender] = true
+               isVerifier[msg.sender]
           ) revert UnAuthorized();
 
           project.title = _project.title;
@@ -206,6 +207,8 @@ contract GetFunded is Owned {
           project.active[project.id] = true;
 
           s_projects.push(project);
+
+          return project.id;
 
           emit Created {
                msg.sender,
@@ -227,6 +230,10 @@ contract GetFunded is Owned {
           if(
                !hasInvested[msg.sender]
           ) revert NotInvested();
+
+          if(
+               isVerifier[msg.sender]
+          ) revert UnAuthorized();
 
           project.fundingAmount += msg.value;
           s_investorsBalance[_projectId][msg.sender] += msg.value;
