@@ -4,6 +4,12 @@ pragma solidity 0.8.22;
 // Uncomment this line to use console.log
 // import "hardhat/console.sol";
 
+/*@title: GetFunded
+@author: Paul
+@notice: This project is a platform that allows anyoone with a project idea to raise funds 
+through retail funding, each project is checked against the criteria of 
+@dev: implements */
+
 import "solmate/src/auth/Owned.sol";
 import "@openzeppelin/contracts/utils/types/Time.sol";
 
@@ -36,6 +42,8 @@ contract GetFunded is Owned {
           string story;
           uint256 duration;
           uint256 fundingAmount;
+          uint256 amountFunded;
+          uint256 fundingBalance;
           ProjectType Type;
           string image;
           bool isFunded;
@@ -145,6 +153,10 @@ contract GetFunded is Owned {
           return s_users;
      }
 
+     function getInvestorsBalance(uint256 _projectid) external view returns (uint256) {
+          reuturn s_investorsBalance[_projectId][msg.sender];
+     }
+
      function setVerifier(string memory _role, uint256 id) public onlyOwner {
           User storage user = s_user[idToUser[id]];
           user.role = keccak256(abi.encodePacked(_role));
@@ -235,7 +247,8 @@ contract GetFunded is Owned {
                isVerifier[msg.sender]
           ) revert UnAuthorized();
 
-          project.fundingAmount += msg.value;
+          project.amountFunded += msg.value;
+          project.fundingBalance = project.fundingAmount - msg.value;
           s_investorsBalance[_projectId][msg.sender] += msg.value;
           project.investors.push(msg.sender);
           s_hasInvested[msg.sender] = true;
@@ -248,50 +261,46 @@ contract GetFunded is Owned {
      }
 
      function refundInvestors(
-        uint _CampaignId
-     ) external returns (string memory) {
-          Campaign storage campaign = mapCampaign[_CampaignId];
-          require(
-            campaign.duration < block.timestamp,
-            "time e o yi pe, pada wa "
-          );
-          require(
-            campaign.campaignBalance < campaign.fundingGoal,
-            "campaign goal reached"
-          );
-          require(
-            contributorBalance[CampaignId][msg.sender] > 0,
-            "you do not have money in this campaign"
-          );
-          campaign.isActive = false;
-          string memory successMessage;
+        uint _projectId
+     ) external onlyOwner returns (bool success) {
+          Project storage project = s_project[_projectId];
+          if(
+            project.duration > _getCurrentTimestamp();
+          ) revert TimeNotReached();
 
-          for (uint i = 0; i < campaign.contributors.length; i++) {
-            if (campaign.contributors[i] == msg.sender) {
-                address contributor = campaign.contributors[i];
-                uint userBalance = contributorBalance[_CampaignId][msg.sender];
-                payable(contributor).transfer(userBalance);
-                contributorBalance[_CampaignId][
-                    contributor
-                ] -= contributorBalance[_CampaignId][msg.sender];
-                campaign.campaignBalance -= userBalance;
+          if(
+            project.fundingBalance > 0
+          ) revert goalReached();
+
+          if(
+            !s_hasInvested[msg.sender]
+          ) revert UnAuthorized();
+
+          project.isActive[_projectId] = false;
+
+          for (uint i = 0; i < project.investors.length; i++) {
+            if (project.investors[i] == msg.sender) {
+                address investor = project.investors[i];
+                uint userBalance = s_investorsBalance[_projectId][msg.sender];
+                payable(investor).transfer(userBalance);
+                s_investorsBalance[_projectId][investor] -= s_investorsBalance[_projectId][msg.sender];
+                project.amountFunded -= userBalance;
             }
           }
-          return (successMessage = "Sorry we have to refund, goal not reached");
+          return (successs = true);
      }
 
-     function payCampaignOwner(uint _CampaignId) public returns (string memory) {
-          Campaign storage campaign = mapCampaign[_CampaignId];
+     function payProjectCreator(uint _projectId) external onlyOwner returns (bool success) {
+          Project storage project = s_project[_projectId];
           require(
-               campaign.campaignBalance >= campaign.fundingGoal,
+               project.fundingBalance >= project.fundingAmount,
                "goal not reached"
           );
-          require(campaign.isActive, "campaign is not active");
-          string memory successMessage;
-          address owner = campaign.campaignOwner;
-          payable(owner).transfer(campaign.campaignBalance);
-          campaign.campaignBalance = 0;
-          campaign.isActive = false;
-          return (successMessage = "Congratulations");
+          require(project.isActive[_projectId], "campaign is not active");
+          address owner = project.owner;
+          payable(owner).transfer(project.fundingBalance);
+          project.fundingBalance = 0;
+          project.isActive[_projectId] = false;
+          return (success = true);
      }
 }
