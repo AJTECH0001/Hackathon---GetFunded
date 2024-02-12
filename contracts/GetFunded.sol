@@ -52,6 +52,10 @@ contract GetFunded is Owned {
           address[] investors;
      }
 
+     struct ProjectFinancials {
+          
+     }
+     
      Project[] s_projects;
      uint256 s_projectId;
 
