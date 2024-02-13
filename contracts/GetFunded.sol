@@ -12,8 +12,10 @@ through retail funding, each project is checked against the criteria of
 
 import "solmate/src/auth/Owned.sol";
 import "@openzeppelin/contracts/utils/types/Time.sol";
+import "./Lib/lib.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/KeeperCompatibleInterface.sol";
 
-contract GetFunded is Owned {
+contract GetFunded is Owned, KeeperCompatibleInterface {
    
      address private immutable i_owner;
      uint256 public s_totalFunded;
@@ -55,7 +57,7 @@ contract GetFunded is Owned {
      struct ProjectFinancials {
           
      }
-     
+
      Project[] s_projects;
      uint256 s_projectId;
 
@@ -68,11 +70,20 @@ contract GetFunded is Owned {
           Business;
      }
 
+     enum ProjectState {
+          Created,
+          Pending,
+          Verified,
+          Canceled
+     }
+
+     ProjectState private s_status
+
      mapping (address => User) private s_user;
      mapping (uint256 => Project) private s_project;
-     mapping (uint256 => address) private idToUserAddress;
-     mapping (address => bool) private isVerifier;
-     mapping (uint => mapping(address => uint))private s_investorsBalance;
+     mapping (uint256 => address) private s_idToUserAddress;
+     mapping (address => bool) private s_isVerifier;
+     mapping (uint => mapping(address => uint)) private s_investorsBalance;
     `mapping (address => bool) private s_hasInvested;
 
      error InvalidUser();
@@ -82,6 +93,7 @@ contract GetFunded is Owned {
      error ZeroAddressUnAuthorized();
      error UnAuthorized();
      error NotInvested();
+     error UpkeepNeeded();
 
      event Created (
           address indexed projectOwner,
@@ -106,7 +118,7 @@ contract GetFunded is Owned {
           for(uint256 i = 0, i <= _verifiers.length, i = i + 1) {
               User storage user = s_verfier[_verifiers[i]];
               user.role = keccak256(abi.encodePacked(_role));
-              isVerifier[_verifiers[i]] = true;
+              s_isVerifier[_verifiers[i]] = true;
               s_verifiers.push(user);
           }
      }
@@ -123,7 +135,7 @@ contract GetFunded is Owned {
 
      modifier onlyVerifier(uint256 id) {
           if (
-               isVerifier[idToUser[id]] = false;
+               s_isVerifier[s_idToUserAddress[id]] = false;
           ) revert NotVerifier();
           _;
      }
@@ -162,10 +174,19 @@ contract GetFunded is Owned {
      }
 
      function setVerifier(string memory _role, uint256 id) public onlyOwner {
-          User storage user = s_user[idToUser[id]];
+          User storage user = s_user[s_idToUserAddress[id]];
           user.role = keccak256(abi.encodePacked(_role));
           s_verifiers.push(user);
-          isVerifier[user] = true;
+          s_isVerifier[user] = true;
+     }
+
+     function getActiveProjects() external returns (Project memory) {
+          for(uint256 i = 0; i < s_projects.length; i++) {
+               Project storage project = s_projects[i];
+               if(project.active[project.id]) {
+                    return project;
+               }
+          }
      }
 
      function registerUser(User calldata _user) external {
@@ -182,7 +203,7 @@ contract GetFunded is Owned {
           user.location = _user.location;
 
           user.uId = s_userId + 1;
-          idToUser[user.uId] = msg.sender;
+          s_idToUserAddress[user.uId] = msg.sender;
 
           s_users.push(user);
 
@@ -203,7 +224,7 @@ contract GetFunded is Owned {
           ) revert ZeroAddressUnAuthorized();
 
           if(
-               isVerifier[msg.sender]
+               s_isVerifier[msg.sender]
           ) revert UnAuthorized();
 
           project.title = _project.title;
@@ -220,7 +241,9 @@ contract GetFunded is Owned {
 
           project.id = s_projectId + 1;
 
-          project.active[project.id] = true;
+          s_status = ProjectState.Pending;
+
+          project.active[project.id] = false;
 
           s_projects.push(project);
 
@@ -235,76 +258,107 @@ contract GetFunded is Owned {
      }
 
      function fundProject(
-        uint _projectId
-     ) public payable onlyUser activeTime(_projectId) {
-          Project storage project = s_project[_projectId];
+        uint _projectid
+     ) public payable onlyUser {
+          Project storage project = s_project[_projectid];
+
 
           if(
                _getCurrentTimestamp() > project.duration
           ) revert NotActive();
 
           if(
-               !hasInvested[msg.sender]
+               !s_hasInvested[msg.sender]
           ) revert NotInvested();
 
           if(
-               isVerifier[msg.sender]
+               s_isVerifier[msg.sender]
           ) revert UnAuthorized();
 
           project.amountFunded += msg.value;
           project.fundingBalance = project.fundingAmount - msg.value;
-          s_investorsBalance[_projectId][msg.sender] += msg.value;
+          s_investorsBalance[_projectid][msg.sender] += msg.value;
           project.investors.push(msg.sender);
           s_hasInvested[msg.sender] = true;
 
+          if(project.fundingAmount) {
+               /* when project is fully funded
+                    update the project funded state
+               */
+          }
           emit Funded (
-               _projectId,
+               _projectid,
                msg.sender,
                msg.value
           );
      }
 
-     function refundInvestors(
-        uint _projectId
-     ) external onlyOwner returns (bool success) {
-          Project storage project = s_project[_projectId];
+     function checkUpkeep(
+          bytes memory /* checkData*/,
+          uint256 _projectid
+     ) public override returns(bool upkeepNeeded, bytes memory /* performData */) {
+          Project storage project = s_project[_projectid];
+          bool isVerified = s_status == ProjectState.Verified;
+          bool active = (project.active[_projectid] = true);
+          bool timePassed = (block.timestamp > project.duration);
+          bool hasInvestors = (project.investors.length > 0);
+          bool hasBalance = (project.amountFunded > 0);
+          bool isFunded = (project.isFunded = true);
+          upkeepNeeded = (isOpen && active && timePassed && hasInvestors && hasBalance && isFunded); 
+     }
+
+     function performUpkeep(
+          bytes calldata /* performData */,
+          uint _projectid
+     ) external override {
+          (bool upkeepNeeded, ) = checkUpkeep("");
+          if(!upkeepNeeded) revert UpkeepNeeded()
+          
+          Project storage project = s_project[_projectid];
+
           if(
             project.duration > _getCurrentTimestamp();
           ) revert TimeNotReached();
 
           if(
-            project.fundingBalance > 0
+            project.fundingBalance > project.fundingAmount
           ) revert goalReached();
 
           if(
             !s_hasInvested[msg.sender]
           ) revert UnAuthorized();
 
-          project.isActive[_projectId] = false;
-
           for (uint i = 0; i < project.investors.length; i++) {
-            if (project.investors[i] == msg.sender) {
-                address investor = project.investors[i];
-                uint userBalance = s_investorsBalance[_projectId][msg.sender];
-                payable(investor).transfer(userBalance);
-                s_investorsBalance[_projectId][investor] -= s_investorsBalance[_projectId][msg.sender];
-                project.amountFunded -= userBalance;
+            if (s_hasInvested[project.investors[i]]) {
+               address investor = project.investors[i];
+               uint userBalance = s_investorsBalance[_projectid][msg.sender];
+               project.amountFunded -= userBalance;
+               s_investorsBalance[_projectid][investor] -= s_investorsBalance[_projectid][msg.sender];
+               (bool success, ) = payable(investor).call{value: userBalance}("");
+               require(success);
             }
           }
-          return (successs = true);
+
+          project.isFunded = false;
+          ProjectState status = ProjectState.Canceled
+          project.isActive[_projectid] = false;
+
+          s_status = ProjectState.Canceled;
+
      }
 
-     function payProjectCreator(uint _projectId) external onlyOwner returns (bool success) {
-          Project storage project = s_project[_projectId];
+     function payProjectCreator(uint _projectid) external onlyOwner returns (bool success) {
+          Project storage project = s_project[_projectid];
           require(
                project.fundingBalance >= project.fundingAmount,
                "goal not reached"
           );
-          require(project.isActive[_projectId], "campaign is not active");
+          if(!project.isActive[_projectid]) return NotActive();
           address owner = project.owner;
-          payable(owner).transfer(project.fundingBalance);
+          (success,) = payable(owner).call{value: project.fundingBalance}("");
           project.fundingBalance = 0;
+          project.amountFunded = 0;
           project.isActive[_projectId] = false;
-          return (success = true);
+          require(success);
      }
 }
