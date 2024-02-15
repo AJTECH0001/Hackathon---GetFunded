@@ -300,7 +300,7 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
 
      function refundInvestors(
           uint _projectid
-     ) external onlyOwner returns(bool success) {
+     ) external onlyOwner returns(bool sent) {
           Project storage project = s_project[_projectid];
 
           if(
@@ -336,8 +336,8 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
                userBalance
           );
 
-          success = true;
-          require(success);
+          sent = true;
+          require(sent);
      }
 
      function payProjectCreator(uint _projectid) external onlyOwner returns (bool sent) {
