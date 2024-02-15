@@ -322,6 +322,7 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
                project.amountFunded -= userBalance;
                s_investorsBalance[_projectid][investor] -= userBalance;
                (bool success, ) = payable(investor).call{value: userBalance}("");
+               s_hasInvested[project.investors[i]] = false;
                require(success);
             }
           }
