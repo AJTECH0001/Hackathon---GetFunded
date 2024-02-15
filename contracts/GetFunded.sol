@@ -44,8 +44,8 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           string story;
           uint256 duration;
           uint256 fundingAmount;
-          uint256 amountFunded;
           uint256 fundingBalance;
+          uint256 amountFunded;
           ProjectType Type;
           string image;
           bool isFunded;
@@ -70,10 +70,11 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           Business;
      }
 
-     enum ProjectState {
+     enum ProjectCycle {
           Created,
           Pending,
           Verified,
+          Funded,
           Canceled
      }
 
@@ -95,14 +96,14 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
      error NotInvested();
      error UpkeepNeeded();
 
-     event Created (
+     event Created(
           address indexed projectOwner,
           string title,
           uint256 blockTimeStamp,
           uint256 amount 
      );
 
-     event Registered (
+     event Registered(
           address indexed user
      );
 
@@ -112,6 +113,10 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           uint256 indexed fundingAmount
      );
 
+     event Refunded(
+          address investor_,
+          uint256 balance
+     );
      constructor(address[] _verifiers, string calldata _role) {
           i_owner = msg.sender;
 
@@ -241,7 +246,7 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
 
           project.id = s_projectId + 1;
 
-          s_status = ProjectState.Pending;
+          s_status = ProjectCycle.Pending;
 
           project.active[project.id] = false;
 
@@ -275,17 +280,17 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
                s_isVerifier[msg.sender]
           ) revert UnAuthorized();
 
+          if(project.fundingBalance == 0) {
+               project.isFunded = true;
+               project.active[project.id] = false;
+          }
+
           project.amountFunded += msg.value;
           project.fundingBalance = project.fundingAmount - msg.value;
           s_investorsBalance[_projectid][msg.sender] += msg.value;
           project.investors.push(msg.sender);
           s_hasInvested[msg.sender] = true;
 
-          if(project.fundingAmount) {
-               /* when project is fully funded
-                    update the project funded state
-               */
-          }
           emit Funded (
                _projectid,
                msg.sender,
@@ -293,27 +298,9 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           );
      }
 
-     function checkUpkeep(
-          bytes memory /* checkData*/,
-          uint256 _projectid
-     ) public override returns(bool upkeepNeeded, bytes memory /* performData */) {
-          Project storage project = s_project[_projectid];
-          bool isVerified = s_status == ProjectState.Verified;
-          bool active = (project.active[_projectid] = true);
-          bool timePassed = (block.timestamp > project.duration);
-          bool hasInvestors = (project.investors.length > 0);
-          bool hasBalance = (project.amountFunded > 0);
-          bool isFunded = (project.isFunded = true);
-          upkeepNeeded = (isOpen && active && timePassed && hasInvestors && hasBalance && isFunded); 
-     }
-
-     function performUpkeep(
-          bytes calldata /* performData */,
+     function refundInvestors(
           uint _projectid
-     ) external override {
-          (bool upkeepNeeded, ) = checkUpkeep("");
-          if(!upkeepNeeded) revert UpkeepNeeded()
-          
+     ) external onlyOwner returns(bool success) {
           Project storage project = s_project[_projectid];
 
           if(
@@ -331,34 +318,41 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           for (uint i = 0; i < project.investors.length; i++) {
             if (s_hasInvested[project.investors[i]]) {
                address investor = project.investors[i];
-               uint userBalance = s_investorsBalance[_projectid][msg.sender];
+               uint userBalance = s_investorsBalance[_projectid][investor];
                project.amountFunded -= userBalance;
-               s_investorsBalance[_projectid][investor] -= s_investorsBalance[_projectid][msg.sender];
+               s_investorsBalance[_projectid][investor] -= userBalance;
                (bool success, ) = payable(investor).call{value: userBalance}("");
                require(success);
             }
           }
 
           project.isFunded = false;
-          ProjectState status = ProjectState.Canceled
+          s_status = ProjectCycle.Canceled;
           project.isActive[_projectid] = false;
+          
+          emit Refunded (
+               investor,
+               userBalance
+          );
 
-          s_status = ProjectState.Canceled;
-
+          success = true;
+          require(success);
      }
 
-     function payProjectCreator(uint _projectid) external onlyOwner returns (bool success) {
+     function payProjectCreator(uint _projectid) external onlyOwner returns (bool sent) {
           Project storage project = s_project[_projectid];
-          require(
-               project.fundingBalance >= project.fundingAmount,
-               "goal not reached"
-          );
+
           if(!project.isActive[_projectid]) return NotActive();
-          address owner = project.owner;
-          (success,) = payable(owner).call{value: project.fundingBalance}("");
-          project.fundingBalance = 0;
-          project.amountFunded = 0;
-          project.isActive[_projectId] = false;
-          require(success);
+          if(
+               project.fundingBalance == 0
+          ) {
+               address owner = project.owner;
+               (success,) = payable(owner).call{value: project.fundingBalance}("");
+               project.amountFunded = 0;
+               project.isActive[_projectId] = false;
+               require(success);
+          }
+          sent = true;
+          require(sent);
      }
 }
