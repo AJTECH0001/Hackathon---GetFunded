@@ -70,7 +70,7 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           Business;
      }
 
-     enum ProjectCycle {
+     enum ProjectState {
           Created,
           Pending,
           Verified,
@@ -185,13 +185,14 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           s_isVerifier[user] = true;
      }
 
-     function getActiveProjects() external returns (Project memory) {
+     function getActiveProjects() external returns (Project[] memory) {
           for(uint256 i = 0; i < s_projects.length; i++) {
                Project storage project = s_projects[i];
                if(project.active[project.id]) {
                     return project;
                }
           }
+          return;
      }
 
      function registerUser(User calldata _user) external {
@@ -340,7 +341,69 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           require(sent);
      }
 
-     function payProjectCreator(uint _projectid) external onlyOwner returns (bool sent) {
+     function _getFundedProjects() internal returns (uint256 id) {
+          for(uint256 i = 0; i < s_projects.length; i++) {
+               Project storage project = s_projects[i];
+               if(
+                    !project.active[project.id] && 
+                    project.isFunded && 
+                    project.fundingBalance = 0
+               ) {
+                    id = project.id;
+               }
+          }
+          return;
+     }
+
+     function checkUpkeep(
+          bytes memory /* checkData*/
+     ) public override returns(bool upkeepNeeded, bytes memory /* performData */) {
+          id = _getFundedProjects();
+          Project storage project = s_project[id];
+          bool isCreated = ProjectState.Created == s_status;
+          bool isVerified = ProjectState.Verified == s_status;
+          bool hasInvestors = (project.investors.length > 0);
+          bool goalReached = (project.amountFunded == project.fundingAmount);
+          bool funded = project.isFunded;
+          upkeepNeeded = (
+               isCreated && 
+               isVerified && 
+               timePassed && 
+               goalReached && 
+               hasInvestors
+          ); 
+     }    
+
+     function performUpkeep(
+          bytes calldata /* performData */
+     ) external override {
+          (bool upkeepNeeded, ) = checkUpkeep("");
+
+          if(!upkeepNeeded) revert Raffle__UpkeepNotNeeded(
+               address(this).balance, s_players.length, uint256(s_raffleState)
+          );
+          
+          id = _getFundedProjects();
+
+          Project storage project = s_project[id];
+
+          if(!project.isActive[id]) return NotActive();
+          if(
+               project.fundingBalance == 0
+          ) {
+               address owner = project.owner;
+               project.amountFunded = 0;
+               uint256 bal = project.fundingBalance;
+               (success,) = payable(owner).call{value: bal}("");
+               project.isActive[id] = false;
+               require(success);
+          }
+          sent = true;
+          require(sent);
+     }
+
+     /**
+      * function payProjectCreator(uint _projectid) external onlyOwner returns (bool sent) {
           Project storage project = s_project[_projectid];
 
           if(!project.isActive[_projectid]) return NotActive();
@@ -348,12 +411,14 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
                project.fundingBalance == 0
           ) {
                address owner = project.owner;
-               (success,) = payable(owner).call{value: project.fundingBalance}("");
                project.amountFunded = 0;
+               uint256 bal = project.fundingBalance;
+               (success,) = payable(owner).call{value: bal}("");
                project.isActive[_projectId] = false;
                require(success);
           }
           sent = true;
           require(sent);
-     }
+     }*
+     **/
 }
