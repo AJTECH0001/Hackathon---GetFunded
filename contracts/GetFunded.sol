@@ -320,8 +320,8 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
             if (s_hasInvested[project.investors[i]]) {
                address investor = project.investors[i];
                uint userBalance = s_investorsBalance[_projectid][investor];
-               project.amountFunded -= userBalance;
                s_investorsBalance[_projectid][investor] -= userBalance;
+               project.amountFunded -= userBalance;
                (bool success, ) = payable(investor).call{value: userBalance}("");
                s_hasInvested[project.investors[i]] = false;
                require(success);
@@ -374,14 +374,13 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           ); 
      }    
 
+     /// Pay Project Creators
      function performUpkeep(
           bytes calldata /* performData */
      ) external override {
           (bool upkeepNeeded, ) = checkUpkeep("");
 
-          if(!upkeepNeeded) revert Raffle__UpkeepNotNeeded(
-               address(this).balance, s_players.length, uint256(s_raffleState)
-          );
+          if(!upkeepNeeded) revert UpkeepNeeded();
           
           id = _getFundedProjects();
 
@@ -392,8 +391,8 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
                project.fundingBalance == 0
           ) {
                address owner = project.owner;
-               project.amountFunded = 0;
-               uint256 bal = project.fundingBalance;
+               uint256 bal = project.amountFunded;
+               bal = 0;
                (success,) = payable(owner).call{value: bal}("");
                project.isActive[id] = false;
                require(success);
