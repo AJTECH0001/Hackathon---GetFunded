@@ -160,9 +160,8 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           return s_totalFunded;
      }
 
-     function _getCurrentTimestamp() internal view returns (uint48 time) {
-          time = Time.timestamp();
-          return time;
+     function _getCurrentTimestamp() internal view returns (uint48 currentTime) {
+          currentTime = Time.timestamp();
      }
 
      function getInvestors(uint256 id) external view returns (address[] memory) {
@@ -176,7 +175,6 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
 
      function getInvestorsBalance(uint256 _projectid) external view returns (uint256 bal) {
           bal = s_investorsBalance[_projectId][msg.sender];
-          return bal;
      }
 
      function setVerifier(string memory _role, uint256 id) public onlyOwner {
