@@ -6,8 +6,7 @@ pragma solidity 0.8.22;
 
 /*@title: GetFunded
 @author: Paul
-@notice: This project is a platform that allows anyoone with a project idea to raise funds 
-through retail funding, each project is checked against the criteria of 
+@notice: This project is a platform that allows anyone to raise funds through crowd-vesting. 
 @dev: implements */
 
 import "solmate/src/auth/Owned.sol";
@@ -161,8 +160,9 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           return s_totalFunded;
      }
 
-     function _getCurrentTimestamp() internal view returns (uint48) {
-          return Time.timestamp();
+     function _getCurrentTimestamp() internal view returns (uint48 time) {
+          time = Time.timestamp();
+          return time;
      }
 
      function getInvestors(uint256 id) external view returns (address[] memory) {
@@ -174,8 +174,9 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           return s_users;
      }
 
-     function getInvestorsBalance(uint256 _projectid) external view returns (uint256) {
-          reuturn s_investorsBalance[_projectId][msg.sender];
+     function getInvestorsBalance(uint256 _projectid) external view returns (uint256 bal) {
+          bal = s_investorsBalance[_projectId][msg.sender];
+          return bal;
      }
 
      function setVerifier(string memory _role, uint256 id) public onlyOwner {
@@ -185,7 +186,7 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           s_isVerifier[user] = true;
      }
 
-     function getActiveProjects() external returns (Project[] memory) {
+     function getActiveProjects() external view returns (Project[] memory) {
           for(uint256 i = 0; i < s_projects.length; i++) {
                Project storage project = s_projects[i];
                if(project.active[project.id]) {
@@ -341,7 +342,7 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           require(sent);
      }
 
-     function _getFundedProjects() internal returns (uint256 id) {
+     function _getFundedProjects() internal view returns (uint256 id) {
           for(uint256 i = 0; i < s_projects.length; i++) {
                Project storage project = s_projects[i];
                if(
