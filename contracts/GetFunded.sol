@@ -1,27 +1,23 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.22;
 
 // Uncomment this line to use console.log
 // import "hardhat/console.sol";
 
 /*@title: GetFunded
-@author: Paul
+@author: 
 @notice: This project is a platform that allows anyone to raise funds through crowd-vesting. 
 @dev: implements */
 
-import "solmate/src/auth/Owned.sol";
-import "@openzeppelin/contracts/utils/types/Time.sol";
-import "./Lib/lib.sol";
-import "@chainlink/contracts/src/v0.8/interfaces/KeeperCompatibleInterface.sol";
 
-contract GetFunded is Owned, KeeperCompatibleInterface {
+contract GetFunded {
    
      address private immutable i_owner;
      uint256 public s_totalFunded;
      address[] private s_verifiers;
      uint256 s_burnFee;
 
-     struct Users {
+     struct User {
           address uAddress;
           string name;
           string email;
@@ -36,7 +32,7 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
 
      struct Project {
           address owner;
-          uint48 timeCreated;
+          uint256 timeCreated;
           uint256 id;
           string title;
           string description;
@@ -48,25 +44,25 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           ProjectType Type;
           string image;
           bool isFunded;
-          mapping (uint256 => bool) public active;
+          
           string financials;
           address[] investors;
      }
 
-     struct ProjectFinancials {
+    //  struct ProjectFinancials {
           
-     }
+    //  }
 
      Project[] s_projects;
      uint256 s_projectId;
 
      enum ProjectType {
-          Technology;
-          Arts;
-          Education;
-          Food;
-          Infrastructure;
-          Business;
+          Technology,
+          Arts,
+          Education,
+          Food,
+          Infrastructure,
+          Business
      }
 
      enum ProjectState {
@@ -77,14 +73,15 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           Canceled
      }
 
-     ProjectState private s_status
+     ProjectState private s_status;
 
      mapping (address => User) private s_user;
      mapping (uint256 => Project) private s_project;
      mapping (uint256 => address) private s_idToUserAddress;
      mapping (address => bool) private s_isVerifier;
      mapping (uint => mapping(address => uint)) private s_investorsBalance;
-    `mapping (address => bool) private s_hasInvested;
+     mapping (address => bool) private s_hasInvested;
+     mapping (uint256 => bool) activeProject;
 
      error InvalidUser();
      error NotVerifier();
@@ -94,6 +91,10 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
      error UnAuthorized();
      error NotInvested();
      error UpkeepNeeded();
+     error NotActive();
+     error TimeNotReached();
+     error reachedGoal();
+
 
      event Created(
           address indexed projectOwner,
@@ -116,30 +117,41 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           address investor_,
           uint256 balance
      );
-     constructor(address[] _verifiers, string calldata _role) {
+     
+     constructor(address[] memory _verifiers, string memory _role) {
           i_owner = msg.sender;
 
-          for(uint256 i = 0, i <= _verifiers.length, i = i + 1) {
-              User storage user = s_verfier[_verifiers[i]];
+          for(uint256 i = 0; i <= _verifiers.length; i = i + 1) {
+              User storage user = s_user[_verifiers[i]];
               user.role = keccak256(abi.encodePacked(_role));
               s_isVerifier[_verifiers[i]] = true;
-              s_verifiers.push(user);
+              s_verifiers.push(_verifiers[i]);
           }
      }
-     
+
+     modifier onlyOwner() {
+          if (
+               i_owner != msg.sender
+          ) revert InvalidUser();
+          if (
+               i_owner == address(0)
+          ) revert InvalidUser();
+          _;
+     }
+
      modifier onlyUser() {
           if (
                msg.sender != s_user[msg.sender].uAddress
           ) revert InvalidUser();
           if (
-               msg.sender == address(0);
+               msg.sender == address(0)
           ) revert InvalidUser();
           _;
      }
 
      modifier onlyVerifier(uint256 id) {
           if (
-               s_isVerifier[s_idToUserAddress[id]] = false;
+               s_isVerifier[s_idToUserAddress[id]] = false
           ) revert NotVerifier();
           _;
      }
@@ -152,46 +164,46 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           return s_project[id];
      }
 
-     function removeProject(uint256 id) external only returns () {
-          delete getProjectById(id);
-     }
+    //  function removeProject(uint256 id) external onlyOwner {
+    //       delete getProjectById(id);
+    //  }
 
      function totalFunded() external view returns (uint256) {
           return s_totalFunded;
      }
 
-     function _getCurrentTimestamp() internal view returns (uint48 currentTime) {
-          currentTime = Time.timestamp();
-     }
+    //  function _getCurrentTimestamp() internal view returns (uint48 currentTime) {
+    //       currentTime = Time.timestamp();
+    //  }
 
      function getInvestors(uint256 id) external view returns (address[] memory) {
           Project storage project = s_project[id];
           return project.investors;
      }
 
-     function getUsers() external view returns (Users[] memory) {
+     function getUsers() external view returns (User[] memory) {
           return s_users;
      }
 
      function getInvestorsBalance(uint256 _projectid) external view returns (uint256 bal) {
-          bal = s_investorsBalance[_projectId][msg.sender];
+          bal = s_investorsBalance[_projectid][msg.sender];
      }
 
      function setVerifier(string memory _role, uint256 id) public onlyOwner {
           User storage user = s_user[s_idToUserAddress[id]];
           user.role = keccak256(abi.encodePacked(_role));
-          s_verifiers.push(user);
-          s_isVerifier[user] = true;
+          s_verifiers.push(s_idToUserAddress[id]);
+          s_isVerifier[s_idToUserAddress[id]] = true;
      }
 
-     function getActiveProjects() external view returns (Project[] memory) {
+     function getActiveProjects() external view returns (uint256 id) {
           for(uint256 i = 0; i < s_projects.length; i++) {
                Project storage project = s_projects[i];
-               if(project.active[project.id]) {
-                    return project;
+               if(activeProject[project.id]) {
+                    id = project.id;
                }
           }
-          return;
+          return id;
      }
 
      function registerUser(User calldata _user) external {
@@ -213,7 +225,7 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           s_users.push(user);
 
           emit Registered (
-               msg.sender,
+               msg.sender
           );
      }
 
@@ -221,7 +233,7 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           Project storage project = s_project[s_projectId];
 
           if(
-               project.active[project.id]
+               activeProject[project.id]
           ) revert ProjectExists();
 
           if(
@@ -236,7 +248,7 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           project.description = _project.description;
           project.owner = msg.sender;
           project.story = _project.story;
-          project.timeCreated = _getCurrentTimestamp();
+          project.timeCreated = block.timestamp;
           project.duration = _project.duration;
           project.fundingAmount = _project.fundingAmount;
           project.Type = _project.Type;
@@ -246,20 +258,20 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
 
           project.id = s_projectId + 1;
 
-          s_status = ProjectCycle.Pending;
+          s_status = ProjectState.Pending;
 
-          project.active[project.id] = false;
+          activeProject[project.id] = false;
 
           s_projects.push(project);
 
           return project.id;
 
-          emit Created {
-               msg.sender,
-               project.title,
-               project.timeCreated,
-               project.fundingAmount
-          }
+        //   emit Created (
+        //        msg.sender,
+        //        project.title,
+        //        project.timeCreated,
+        //        project.fundingAmount
+        //   );
      }
 
      function fundProject(
@@ -269,7 +281,7 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
 
 
           if(
-               _getCurrentTimestamp() > project.duration
+               block.timestamp > project.duration
           ) revert NotActive();
 
           if(
@@ -282,7 +294,7 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
 
           if(project.fundingBalance == 0) {
                project.isFunded = true;
-               project.active[project.id] = false;
+               activeProject[project.id] = false;
           }
 
           project.amountFunded += msg.value;
@@ -304,12 +316,12 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           Project storage project = s_project[_projectid];
 
           if(
-            project.duration > _getCurrentTimestamp();
+            project.duration > block.timestamp
           ) revert TimeNotReached();
 
           if(
             project.fundingBalance > project.fundingAmount
-          ) revert goalReached();
+          ) revert reachedGoal();
 
           if(
             !s_hasInvested[msg.sender]
@@ -328,13 +340,13 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           }
 
           project.isFunded = false;
-          s_status = ProjectCycle.Canceled;
-          project.isActive[_projectid] = false;
+          s_status = ProjectState.Canceled;
+          activeProject[_projectid] = false;
           
-          emit Refunded (
-               investor,
-               userBalance
-          );
+        //   emit Refunded (
+        //        investor,
+        //        userBalance
+        //   );
 
           sent = true;
           require(sent);
@@ -344,61 +356,58 @@ contract GetFunded is Owned, KeeperCompatibleInterface {
           for(uint256 i = 0; i < s_projects.length; i++) {
                Project storage project = s_projects[i];
                if(
-                    !project.active[project.id] && 
+                    !activeProject[project.id] && 
                     project.isFunded && 
-                    project.fundingBalance = 0
+                    project.fundingBalance == 0
                ) {
                     id = project.id;
                }
           }
-          return;
+          return id;
      }
 
-     function checkUpkeep(
-          bytes memory /* checkData*/
-     ) public override returns(bool upkeepNeeded, bytes memory /* performData */) {
-          id = _getFundedProjects();
-          Project storage project = s_project[id];
-          bool isCreated = ProjectState.Created == s_status;
-          bool isVerified = ProjectState.Verified == s_status;
-          bool hasInvestors = (project.investors.length > 0);
-          bool goalReached = (project.amountFunded == project.fundingAmount);
-          bool funded = project.isFunded;
-          upkeepNeeded = (
-               isCreated && 
-               isVerified && 
-               timePassed && 
-               goalReached && 
-               hasInvestors
-          ); 
-     }    
+    //  function checkUpkeep(
+    //       bytes memory /* checkData*/
+    //  ) public override returns(bool upkeepNeeded, bytes memory /* performData */) {
+    //       uint256 id = _getFundedProjects();
+    //       Project storage project = s_project[id];
+    //       bool isCreated = ProjectState.Created == s_status;
+    //       bool isVerified = ProjectState.Verified == s_status;
+    //       bool hasInvestors = (project.investors.length > 0);
+    //       bool goalReached = (project.amountFunded == project.fundingAmount);
+    //       bool funded = project.isFunded;
+    //       upkeepNeeded = (
+    //            isCreated && 
+    //            isVerified && 
+    //            goalReached && 
+    //            hasInvestors
+    //       ); 
+    //  }    
 
      /// Pay Project Creators
-     function performUpkeep(
-          bytes calldata /* performData */
-     ) external override {
-          (bool upkeepNeeded, ) = checkUpkeep("");
+    //  function performUpkeep(
+    //       bytes calldata /* performData */
+    //  ) external override {
+    //       (bool upkeepNeeded, ) = checkUpkeep("");
 
-          if(!upkeepNeeded) revert UpkeepNeeded();
+    //       if(!upkeepNeeded) revert UpkeepNeeded();
           
-          id = _getFundedProjects();
+    //       uint256 id = _getFundedProjects();
 
-          Project storage project = s_project[id];
+    //       Project storage project = s_project[id];
 
-          if(!project.isActive[id]) return NotActive();
-          if(
-               project.fundingBalance == 0
-          ) {
-               address owner = project.owner;
-               uint256 bal = project.amountFunded;
-               bal = 0;
-               (success,) = payable(owner).call{value: bal}("");
-               project.isActive[id] = false;
-               require(success);
-          }
-          sent = true;
-          require(sent);
-     }
+    //       if(!project.isActive[id]) return NotActive();
+    //       if(
+    //            project.fundingBalance == 0
+    //       ) {
+    //            address owner = project.owner;
+    //            uint256 bal = project.amountFunded;
+    //            bal = 0;
+    //            (bool success,) = payable(owner).call{value: bal}("");
+    //            project.isActive[id] = false;
+    //            require(success);
+    //       }
+    //  }
 
      /**
       * function payProjectCreator(uint _projectid) external onlyOwner returns (bool sent) {
